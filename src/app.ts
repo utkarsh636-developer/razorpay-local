@@ -1,4 +1,5 @@
 import express from 'express';
+import { WebhookDispatcher } from './webhooks';
 import { randomBytes } from 'node:crypto';
 
 type Order = {
@@ -53,8 +54,23 @@ export function createApp() {
   const orders = new Map<string, Order>();
   const payments = new Map<string, Payment>();
 
+  const webhooks = new WebhookDispatcher();
+
+  app.post('/_emulator/webhooks', (req, res) => {
+    const { url, secret } = req.body ?? {};
+    if (typeof url !== 'string' || typeof secret !== 'string') {
+      return res.status(400).json({ error: 'url and secret are required' });
+    }
+    webhooks.config = { url, secret };
+    res.json({ ok: true });
+  });
+
+  app.get('/_emulator/webhooks/log', (_req, res) => {
+    res.json(webhooks.log);
+  });
+
   // Emulator-only controls (not part of the real Razorpay API, no login needed).
-  app.post('/_emulator/orders/:id/pay', (req, res) => {
+  app.post('/_emulator/orders/:id/pay', async (req, res) => {
     const order = orders.get(req.params.id);
     if (!order) return res.status(404).json({ error: 'order not found' });
     if (order.status === 'paid') {
@@ -85,6 +101,21 @@ export function createApp() {
       order.amount_due = 0;
       order.status = 'paid';
     }
+
+    if (failed) {
+      await webhooks.send('payment.failed', ['payment'], {
+        payment: { entity: payment },
+      });
+    } else {
+      await webhooks.send('payment.captured', ['payment'], {
+        payment: { entity: payment },
+      });
+      await webhooks.send('order.paid', ['payment', 'order'], {
+        payment: { entity: payment },
+        order: { entity: order },
+      });
+    }
+
     res.json({ payment, order });
   });
 
