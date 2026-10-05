@@ -19,8 +19,11 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
     "razorpay-a": "npm:razorpay@^2.0.7",
-    "razorpay-b": "npm:razorpay@^2.8.0",
+    "razorpay-b": "npm:razorpay@^2.9.0",
     "razorpay-c": "npm:razorpay@^2.9.8",
+    "razorpay-d": "npm:razorpay@^2.8.6",
+    "rzp-293": "npm:razorpay@^2.9.3",
+    "rzp-294": "npm:razorpay@^2.9.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
