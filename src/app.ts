@@ -69,6 +69,37 @@ export function createApp() {
     res.json(webhooks.log);
   });
 
+  app.post('/_emulator/webhooks/chaos', (req, res) => {
+    const b = req.body ?? {};
+    const c = webhooks.chaos;
+    if (b.duplicate !== undefined) {
+      if (!Number.isInteger(b.duplicate) || b.duplicate < 0 || b.duplicate > 10) {
+        return res.status(400).json({ error: 'duplicate must be an integer from 0 to 10' });
+      }
+      c.duplicate = b.duplicate;
+    }
+    if (b.delayMs !== undefined) {
+      if (!Number.isInteger(b.delayMs) || b.delayMs < 0 || b.delayMs > 60000) {
+        return res.status(400).json({ error: 'delayMs must be an integer from 0 to 60000' });
+      }
+      c.delayMs = b.delayMs;
+    }
+    if (b.drop !== undefined) c.drop = Boolean(b.drop);
+    if (b.reverse !== undefined) c.reverse = Boolean(b.reverse);
+    res.json(c);
+  });
+
+  app.post('/_emulator/webhooks/chaos/reset', (_req, res) => {
+    webhooks.resetChaos();
+    res.json(webhooks.chaos);
+  });
+
+  app.post('/_emulator/webhooks/replay/:id', async (req, res) => {
+    const ok = await webhooks.replay(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'unknown event id' });
+    res.json({ ok: true });
+  });
+
   // Emulator-only controls (not part of the real Razorpay API, no login needed).
   app.post('/_emulator/orders/:id/pay', async (req, res) => {
     const order = orders.get(req.params.id);
@@ -103,17 +134,14 @@ export function createApp() {
     }
 
     if (failed) {
-      await webhooks.send('payment.failed', ['payment'], {
-        payment: { entity: payment },
-      });
+      await webhooks.sendAll([
+        { event: 'payment.failed', contains: ['payment'], payload: { payment: { entity: payment } } },
+      ]);
     } else {
-      await webhooks.send('payment.captured', ['payment'], {
-        payment: { entity: payment },
-      });
-      await webhooks.send('order.paid', ['payment', 'order'], {
-        payment: { entity: payment },
-        order: { entity: order },
-      });
+      await webhooks.sendAll([
+        { event: 'payment.captured', contains: ['payment'], payload: { payment: { entity: payment } } },
+        { event: 'order.paid', contains: ['payment', 'order'], payload: { payment: { entity: payment }, order: { entity: order } } },
+      ]);
     }
 
     res.json({ payment, order });
