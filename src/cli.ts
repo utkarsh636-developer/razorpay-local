@@ -1,3 +1,4 @@
+import { createApp } from './app';
 import { runScenarios, isLocalUrl } from './scenarios';
 
 function arg(name: string): string | undefined {
@@ -7,16 +8,34 @@ function arg(name: string): string | undefined {
 
 function usage() {
   console.log(
-    'Usage: razorpay-local test --url <webhook url> --secret <webhook secret>\n' +
-      '       [--order-id <id>] [--payment-id <id>] [--allow-remote]'
+    'Usage:\n' +
+      '  razorpay-local start [--port 4000] [--host 127.0.0.1]\n' +
+      '  razorpay-local test --url <webhook url> --secret <webhook secret>\n' +
+      '                      [--order-id <id>] [--payment-id <id>] [--allow-remote]'
   );
 }
 
 async function main() {
-  if (process.argv[2] !== 'test') {
+  const command = process.argv[2];
+
+  if (command === 'start') {
+    const port = Number(arg('port') ?? 4000);
+    const host = arg('host') ?? '127.0.0.1';
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      console.log('Invalid --port');
+      process.exit(2);
+    }
+    createApp().listen(port, host, () => {
+      console.log(`razorpay-local emulator running on http://${host}:${port}`);
+    });
+    return;
+  }
+
+  if (command !== 'test') {
     usage();
     process.exit(2);
   }
+  
   const url = arg('url');
   const secret = arg('secret');
   if (!url || !secret) {
