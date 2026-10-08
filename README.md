@@ -23,6 +23,8 @@ and then break the webhook delivery on purpose.
 
 ### With npx
 
+Requires **Node.js 22 or newer**.
+
 ```bash
 npx razorpay-local start
 ```

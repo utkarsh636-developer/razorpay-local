@@ -1,7 +1,7 @@
 {
   "name": "razorpay-local",
   "version": "0.1.0",
-  "description": "A local emulator for the Razorpay API: orders, payments, signed webhooks and chaos controls.",
+  "description": "Unofficial local emulator for the Razorpay API: orders, payments, signed webhooks and chaos controls.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -12,31 +12,50 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsup && tsc -p tsconfig.build.json",
     "dev": "tsx watch src/server.ts",
     "razorpay-local": "tsx src/cli.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "razorpay",
+    "mock",
+    "emulator",
+    "payments",
+    "webhooks",
+    "testing",
+    "upi",
+    "india",
+    "payment-gateway"
+  ],
+  "author": "Utkarsh Kankal",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/utkarsh636-developer/razorpay-local.git"
+  },
+  "homepage": "https://github.com/utkarsh636-developer/razorpay-local#readme",
+  "bugs": {
+    "url": "https://github.com/utkarsh636-developer/razorpay-local/issues"
+  },
   "type": "commonjs",
   "dependencies": {
     "express": "^5.2.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/node": "^26.6.4",
+    "@types/node": "^22.6.4",
     "razorpay": "^2.9.8",
-    "razorpay-a": "npm:razorpay@^2.0.7",
-    "razorpay-b": "npm:razorpay@^2.9.0",
-    "razorpay-c": "npm:razorpay@^2.9.8",
-    "razorpay-d": "npm:razorpay@^2.8.6",
-    "rzp-293": "npm:razorpay@^2.9.3",
-    "rzp-294": "npm:razorpay@^2.9.4",
+    "razorpay-a": "npm:razorpay@2.0.7",
+    "razorpay-b": "npm:razorpay@2.9.0",
+    "razorpay-c": "npm:razorpay@2.9.8",
+    "razorpay-d": "npm:razorpay@2.8.6",
+    "rzp-293": "npm:razorpay@2.9.3",
+    "rzp-294": "npm:razorpay@2.9.4",
     "tsup": "^8.5.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
