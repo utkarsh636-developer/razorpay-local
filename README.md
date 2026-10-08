@@ -19,6 +19,27 @@ and almost nobody tests for that.
 `razorpay-local` lets you create orders, force a payment to succeed or fail,
 and then break the webhook delivery on purpose.
 
+### Why not just use mocks (`vi.mock('razorpay')`)?
+
+When you mock the SDK you are testing your own imagination, not real Razorpay
+behaviour. A mock won't catch a wrong amount, a missing auth header, or a
+response field your code assumed would always be present. `razorpay-local`
+makes the real SDK fire real HTTP requests and receive real JSON responses.
+
+### Why not use the live Razorpay sandbox?
+
+The sandbox is great for a final manual click-through. It is a poor fit for
+automated tests:
+
+| | Sandbox | razorpay-local |
+| --- | --- | --- |
+| Network required | Yes | No |
+| API keys required | Yes | No |
+| Speed per test | 1 – 3 s | < 5 ms |
+| Force a payment failure | Manual only | One API call |
+| Duplicate / delayed webhooks | Impossible | Built-in |
+| Works in CI/CD offline | No | Yes |
+
 ## Quick start
 
 ### With npx
@@ -61,6 +82,104 @@ const rzp = useEmulator(
 version is not supported it throws, instead of silently calling the real
 Razorpay API.
 
+### Adding it to an existing app (no production code changes needed)
+
+If your app initialises the Razorpay client once (e.g. `src/lib/razorpay.ts`),
+add just these two lines. Your production code is untouched.
+
+```ts
+// src/lib/razorpay.ts
+import Razorpay from 'razorpay';
+import { useEmulator } from 'razorpay-local'; // [+]
+
+export const rzp = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID || 'dummy',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || 'dummy',
+});
+
+// [+] Only active during tests or local dev. Production is never affected.
+if (process.env.NODE_ENV === 'test' || process.env.USE_EMULATOR === 'true') {
+  useEmulator(rzp, process.env.EMULATOR_URL || 'http://localhost:4000');
+}
+```
+
+Everything else in your app stays identical. In production `NODE_ENV` is
+`'production'`, so `useEmulator` is never called.
+
+## Simulating payments in tests
+
+Once the SDK points at the emulator, trigger a payment with a plain `fetch`
+call — no browser, no OTP, no manual clicking:
+
+```ts
+import { createApp } from 'razorpay-local';
+import { rzp } from '../src/lib/razorpay'; // your app's SDK instance
+
+let server: any;
+
+beforeAll(() => { server = createApp().listen(4000); });
+afterAll(() => server.close());
+
+it('marks the order paid after a successful payment', async () => {
+  // 1. Your app creates an order as normal.
+  const order = await rzp.orders.create({ amount: 50000, currency: 'INR' });
+  expect(order.status).toBe('created');
+
+  // 2. Simulate the customer completing payment.
+  const res = await fetch(`http://localhost:4000/_emulator/orders/${order.id}/pay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outcome: 'success' }),
+  });
+  const { payment } = await res.json();
+  expect(payment.status).toBe('captured');
+
+  // 3. Fetch the updated order from the emulator (same call your app makes).
+  const updated = await rzp.orders.fetch(order.id);
+  expect(updated.status).toBe('paid');
+  expect(updated.amount_due).toBe(0);
+});
+
+it('keeps the order as attempted after a payment failure', async () => {
+  const order = await rzp.orders.create({ amount: 20000, currency: 'INR' });
+
+  const res = await fetch(`http://localhost:4000/_emulator/orders/${order.id}/pay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outcome: 'fail' }),
+  });
+  const { payment } = await res.json();
+  expect(payment.status).toBe('failed');
+
+  const updated = await rzp.orders.fetch(order.id);
+  expect(updated.status).toBe('attempted');
+  expect(updated.amount_due).toBe(20000); // still unpaid — customer can retry
+});
+```
+
+### Webhook events fired automatically
+
+| Outcome | Events fired (in order) |
+| --- | --- |
+| `success` | `payment.captured`, then `order.paid` |
+| `fail` | `payment.failed` |
+
+All events are signed with HMAC-SHA256 in `X-Razorpay-Signature`, so
+`Razorpay.validateWebhookSignature` accepts them out of the box.
+
+To receive webhooks in your tests, register your handler URL once:
+
+```ts
+await fetch('http://localhost:4000/_emulator/webhooks', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    url: 'http://localhost:3000/api/razorpay/webhook',
+    secret: process.env.RAZORPAY_WEBHOOK_SECRET,
+  }),
+});
+```
+
 ## Supported SDK versions
 
 The `razorpay` npm package **2.9.4 and newer**. These versions use Axios, so
@@ -86,20 +205,35 @@ The Razorpay routes that exist today: `POST /v1/orders`, `GET /v1/orders`,
 `GET /v1/orders/:id`, `GET /v1/orders/:id/payments` and
 `GET /v1/payments/:id`. They require a `Basic` authorization header.
 
-Webhooks are signed with HMAC-SHA256 in the `X-Razorpay-Signature` header, so
-`Razorpay.validateWebhookSignature` accepts them. Events sent: `payment.captured`,
-`order.paid` and `payment.failed`.
 
 ## Chaos options
+
+Real-world webhooks are unreliable. Use chaos options to prove your handler
+survives before you ship:
+
+```ts
+// Send every webhook 2 extra times (3 total) to test idempotency.
+await fetch('http://localhost:4000/_emulator/webhooks/chaos', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ duplicate: 2 }),
+});
+```
 
 Send these to `POST /_emulator/webhooks/chaos`:
 
 | Option | Type | Effect |
 | --- | --- | --- |
-| `duplicate` | integer, 0 to 10 | Sends each event this many extra times, with the same event id. |
+| `duplicate` | integer, 0 to 10 | Sends each event this many extra times, with the same event id. Use this to test that your handler never credits a customer twice. |
 | `delayMs` | integer, 0 to 60000 | Waits before delivering, so the webhook arrives after the pay call returns. |
 | `drop` | boolean | Never delivers. The log still records the event as dropped. |
 | `reverse` | boolean | Delivers `order.paid` before `payment.captured`. |
+
+Reset to normal delivery at any time:
+
+```bash
+POST http://localhost:4000/_emulator/webhooks/chaos/reset
+```
 
 ## Test runner
 
