@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { buildOrder, buildPayment, now } from './entities';
 import { sign } from './webhooks';
 
 export type Options = {
@@ -41,19 +41,15 @@ async function post(url: string, body: string, signature: string | null): Promis
 
 // Fresh ids for every scenario, so scenarios don't interfere with each other.
 function fresh(o: Options) {
-  const orderId = o.orderId ?? 'order_' + randomBytes(7).toString('hex');
-  const paymentId = o.paymentId ?? 'pay_' + randomBytes(7).toString('hex');
-  const at = Math.floor(Date.now() / 1000);
-  const order = {
-    id: orderId, entity: 'order', amount: 50000, amount_paid: 50000,
-    amount_due: 0, currency: 'INR', receipt: null, offer_id: null,
-    status: 'paid', attempts: 1, notes: [], created_at: at,
-  };
-  const payment = {
-    id: paymentId, entity: 'payment', amount: 50000, currency: 'INR',
-    status: 'captured', order_id: orderId, captured: true, method: 'card',
-    error_code: null, error_description: null, created_at: at,
-  };
+  const at = now();
+  const order = buildOrder({ amount: 50000, currency: 'INR' });
+  if (o.orderId) order.id = o.orderId;
+  order.status = 'paid';
+  order.amount_paid = 50000;
+  order.amount_due = 0;
+  order.attempts = 1;
+  const payment = buildPayment(order, 'success');
+  if (o.paymentId) payment.id = o.paymentId;
   const wrap = (event: string, contains: string[], payload: object) =>
     JSON.stringify({
       entity: 'event', account_id: 'acc_emulator', event, contains, payload, created_at: at,

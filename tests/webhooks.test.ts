@@ -68,8 +68,39 @@ describe('webhooks', () => {
     const order = await rzp.orders.create({ amount: 50000, currency: 'INR' });
     await pay(order.id, 'success');
 
-    const events = received.map((r) => JSON.parse(r.body).event);
+    const parsed = received.map((r) => JSON.parse(r.body));
+    const events = parsed.map((p) => p.event);
     expect(events).toEqual(['payment.captured', 'order.paid']);
+
+    // Verify payment.captured payload shape
+    const captured = parsed[0];
+    expect(captured.entity).toBe('event');
+    expect(captured.account_id).toMatch(/^acc_/);
+    expect(captured.contains).toEqual(['payment']);
+    expect(Number.isInteger(captured.created_at)).toBe(true);
+    expect(captured.payload.payment.entity).toBeDefined();
+    const paymentEntity = captured.payload.payment.entity;
+    expect(paymentEntity.entity).toBe('payment');
+    expect(paymentEntity.amount).toBe(50000); // in paise
+    expect(paymentEntity.currency).toBe('INR');
+    expect(paymentEntity.status).toBe('captured');
+    expect(paymentEntity.order_id).toBe(order.id);
+    expect(paymentEntity.captured).toBe(true);
+    expect(Number.isInteger(paymentEntity.created_at)).toBe(true);
+
+    // Verify order.paid payload shape
+    const paid = parsed[1];
+    expect(paid.entity).toBe('event');
+    expect(paid.contains).toEqual(['payment', 'order']);
+    expect(paid.payload.order.entity).toBeDefined();
+    expect(paid.payload.payment.entity).toBeDefined();
+    const orderEntity = paid.payload.order.entity;
+    expect(orderEntity.entity).toBe('order');
+    expect(orderEntity.amount).toBe(50000); // in paise
+    expect(orderEntity.amount_paid).toBe(50000);
+    expect(orderEntity.amount_due).toBe(0);
+    expect(orderEntity.status).toBe('paid');
+    expect(Number.isInteger(orderEntity.created_at)).toBe(true);
 
     // The real SDK's own check must accept our signatures.
     for (const r of received) {
@@ -79,12 +110,28 @@ describe('webhooks', () => {
     }
   });
 
-  it('sends payment.failed for a failed payment', async () => {
+  it('sends payment.failed for a failed payment with correct error shape', async () => {
     received.length = 0;
     const order = await rzp.orders.create({ amount: 20000, currency: 'INR' });
     await pay(order.id, 'fail');
-    const events = received.map((r) => JSON.parse(r.body).event);
+
+    const parsed = received.map((r) => JSON.parse(r.body));
+    const events = parsed.map((p) => p.event);
     expect(events).toEqual(['payment.failed']);
+
+    const failed = parsed[0];
+    expect(failed.entity).toBe('event');
+    expect(failed.contains).toEqual(['payment']);
+    expect(failed.payload.payment.entity).toBeDefined();
+    const payment = failed.payload.payment.entity;
+    expect(payment.status).toBe('failed');
+    expect(payment.captured).toBe(false);
+    expect(payment.amount).toBe(20000);
+    expect(payment.error_code).toBe('BAD_REQUEST_ERROR');
+    expect(payment.error_description).toBeDefined();
+    expect(payment.error_source).toBe('customer');
+    expect(payment.error_step).toBe('payment_authentication');
+    expect(payment.error_reason).toBe('payment_failed');
   });
 
   it('a wrong secret fails the SDK signature check', async () => {

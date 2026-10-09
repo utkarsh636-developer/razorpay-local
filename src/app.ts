@@ -1,38 +1,7 @@
 import express from 'express';
 import { WebhookDispatcher } from './webhooks';
-import { randomBytes } from 'node:crypto';
-
-type Order = {
-  id: string;
-  entity: 'order';
-  amount: number;
-  amount_paid: number;
-  amount_due: number;
-  currency: string;
-  receipt: string | null;
-  offer_id: null;
-  status: 'created' | 'attempted' | 'paid';
-  attempts: number;
-  notes: unknown;
-  created_at: number;
-};
-
-type Payment = {
-  id: string;
-  entity: 'payment';
-  amount: number;
-  currency: string;
-  status: 'captured' | 'failed';
-  order_id: string;
-  captured: boolean;
-  method: string;
-  error_code: string | null;
-  error_description: string | null;
-  created_at: number;
-};
-
-const newId = (prefix: string) => prefix + '_' + randomBytes(7).toString('hex');
-const now = () => Math.floor(Date.now() / 1000);
+import { buildOrder, buildPayment } from './entities';
+import type { Order, Payment } from './entities';
 
 function errorBody(description: string) {
   return {
@@ -109,19 +78,7 @@ export function createApp() {
     }
     const failed = req.body?.outcome === 'fail';
 
-    const payment: Payment = {
-      id: newId('pay'),
-      entity: 'payment',
-      amount: order.amount,
-      currency: order.currency,
-      status: failed ? 'failed' : 'captured',
-      order_id: order.id,
-      captured: !failed,
-      method: 'card',
-      error_code: failed ? 'BAD_REQUEST_ERROR' : null,
-      error_description: failed ? 'Payment failed (simulated by emulator)' : null,
-      created_at: now(),
-    };
+    const payment = buildPayment(order, failed ? 'fail' : 'success');
     payments.set(payment.id, payment);
 
     order.attempts += 1;
@@ -164,20 +121,7 @@ export function createApp() {
     if (typeof currency !== 'string') {
       return res.status(400).json(errorBody('The currency field is required.'));
     }
-    const order: Order = {
-      id: newId('order'),
-      entity: 'order',
-      amount,
-      amount_paid: 0,
-      amount_due: amount,
-      currency,
-      receipt: receipt ?? null,
-      offer_id: null,
-      status: 'created',
-      attempts: 0,
-      notes: notes ?? [],
-      created_at: now(),
-    };
+    const order = buildOrder({ amount, currency, receipt, notes });
     orders.set(order.id, order);
     res.json(order);
   });

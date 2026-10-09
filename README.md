@@ -1,9 +1,15 @@
 # razorpay-local
 
-A local emulator for the Razorpay API. It runs on your machine, speaks the same
-HTTP routes as Razorpay for orders and payments, and sends signed webhooks to
-your app, so you can test payment flows without the network, test keys or a
-browser checkout.
+A local emulator for the Razorpay API. It runs on your machine, speaks a
+compatible subset of the same HTTP routes as Razorpay for orders and payments,
+and sends signed webhooks to your app, so you can test payment flows without
+the network, test keys or a browser checkout.
+
+> **Payload shape disclaimer.** The payment and order entities emitted by this
+> emulator are a **compatible subset** of the real Razorpay schema. Fields that
+> are always `null` or empty (such as `acquirer_data`) are present but empty.
+> Fields that vary by payment method (card details, UPI VPA, etc.) are not
+> simulated. Do not assume exact field-for-field parity with production.
 
 > **Unofficial.** This project is not affiliated with, endorsed by or
 > connected to Razorpay.
@@ -272,6 +278,9 @@ Optional flags: `--order-id`, `--payment-id`, `--allow-remote`.
 - Refunds, customers, subscriptions, invoices, payment links, payouts and
   other Razorpay APIs. Only orders and payments exist.
 - Real payment methods. Every simulated payment is a card payment.
+- Payment-method-specific fields (`card`, `upi`, `acquirer_data` contents, etc.).
+  These objects are present but empty. Handlers that read, for example,
+  `payment.acquirer_data.bank_transaction_id` will see `undefined` in tests.
 - Order options such as `max_attempts`; there is no retry limit.
 - Real key checking. Any `Basic` authorization header is accepted.
 - Persistence. All data lives in memory and is lost when the process stops.
