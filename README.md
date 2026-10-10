@@ -5,6 +5,8 @@ compatible subset of the same HTTP routes as Razorpay for orders and payments,
 and sends signed webhooks to your app, so you can test payment flows without
 the network, test keys or a browser checkout.
 
+![razorpay-local Demo](./assets/razorpay-local-demo.gif)
+
 > **Payload shape disclaimer.** The payment and order entities emitted by this
 > emulator are a **compatible subset** of the real Razorpay schema. Fields that
 > are always `null` or empty (such as `acquirer_data`) are present but empty.
